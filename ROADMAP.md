@@ -50,3 +50,21 @@
 - Scope:
   - Rewrite privacy_pool to Anchor Context/Accounts
   - Anchor ProgramEntry dispatch
+
+## v0.1.6 - Swap Hardening & Observability
+
+- Status: ✅ Completed
+- Scope:
+  - Store pool PDA bump and validate PDA at runtime
+  - Enforce swap token account/mint constraints and vault PDA usage
+  - Validate token_2022 program and platform fee account
+  - Emit events for core instructions
+  - Add swap/vault and route plan boundary tests
+  - Document swap visibility boundary
+
+## v0.1.7 - Error Codes & Swap Negative Tests
+
+- Status: ✅ Completed
+- Scope:
+  - Replace InvalidInstructionData with explicit PrivacyPoolError variants
+  - Add swap validation tests for authority id, token_2022, and platform fee account
