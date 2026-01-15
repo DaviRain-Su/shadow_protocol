@@ -22,3 +22,31 @@
 - Scope:
   - Replace DFlow adapter design with Jupiter V6 sharedAccountsRoute
   - Document CPI accounts and instruction parameters
+
+## v0.1.2 - Jupiter CPI Skeleton
+
+- Status: ✅ Completed
+- Scope:
+  - Implement sharedAccountsRoute CPI helper in Zig
+  - Export CPI module from library
+
+## v0.1.3 - Jupiter Swap Flow Skeleton
+
+- Status: ✅ Completed
+- Scope:
+  - Add sharedAccountsRoute encoder
+  - Wire swap instruction handler to Jupiter CPI
+
+## v0.1.4 - Jupiter RoutePlan Encoding
+
+- Status: ✅ Completed
+- Scope:
+  - Encode Swap/Side and RoutePlanStep (Borsh)
+  - Build sharedAccountsRoute data from steps
+
+## v0.1.5 - Anchor Program Rewrite
+
+- Status: ✅ Completed
+- Scope:
+  - Rewrite privacy_pool to Anchor Context/Accounts
+  - Anchor ProgramEntry dispatch
