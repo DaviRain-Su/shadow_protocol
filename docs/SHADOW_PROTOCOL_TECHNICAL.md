@@ -22,13 +22,13 @@
 ```zig
 //! Merkle Tree for Privacy Pool
 //!
-//! 深度 20 = 支持 2^20 = 1,048,576 笔存款
+//! 深度 26 = 支持 2^26 = 67,108,864 笔存款
 
 const std = @import("std");
 const anchor = @import("sol_anchor_zig");
 const sol = anchor.sdk;
 
-pub const MERKLE_DEPTH: u8 = 20;
+pub const MERKLE_DEPTH: u8 = 26;
 pub const MERKLE_CAPACITY: u32 = 1 << MERKLE_DEPTH;
 
 /// 预计算的零值 (每层的默认哈希)
@@ -225,10 +225,15 @@ pub const NullifierSet = struct {
 
 const bn254 = @import("bn254.zig");
 
-/// Tornado Cash withdraw 电路的验证密钥
-/// Public inputs: root, nullifierHash, recipient, relayer, fee (5 个)
-pub const WithdrawVerifyingKey = struct {
-    pub const NUM_PUBLIC_INPUTS = 5;
+/// Privacy Cash transaction2 JoinSplit 电路的验证密钥
+/// Public inputs (7):
+/// - root
+/// - publicAmount
+/// - extDataHash
+/// - inputNullifier[2]
+/// - outputCommitment[2]
+pub const TransactionVerifyingKey = struct {
+    pub const NUM_PUBLIC_INPUTS = 7;
 
     /// Alpha point (G1)
     pub const alpha: bn254.G1Point = comptime parseG1(
@@ -520,10 +525,10 @@ pub const ShadowPool = struct {
         ctx: anchor.Context(WithdrawAccounts),
         proof: Groth16Proof,
         root: [32]u8,
-        nullifier_hash: [32]u8,
-        recipient: sol.PublicKey,
-        relayer: sol.PublicKey,
-        fee: u64,
+        public_amount: [32]u8,
+        ext_data_hash: [32]u8,
+        input_nullifier: [2][32]u8,
+        output_commitment: [2][32]u8,
     ) !void {
         const pool = ctx.accounts.pool;
 
@@ -532,60 +537,53 @@ pub const ShadowPool = struct {
             return error.InvalidRoot;
         }
 
-        // 2. 检查 nullifier 未使用
-        if (ctx.accounts.nullifier_set.data.nullifiers.contains(nullifier_hash)) {
-            return error.NullifierAlreadyUsed;
+        // 2. 检查所有 input nullifier 未使用
+        for (input_nullifier) |nullifier_hash| {
+            if (ctx.accounts.nullifier_set.data.nullifiers.contains(nullifier_hash)) {
+                return error.NullifierAlreadyUsed;
+            }
         }
 
-        // 3. 准备公开输入
-        const public_inputs: [5][32]u8 = .{
+        // 3. 准备公开输入 (JoinSplit)
+        const public_inputs: [7][32]u8 = .{
             root,
-            nullifier_hash,
-            pubkeyToField(recipient),
-            pubkeyToField(relayer),
-            u64ToField(fee),
+            public_amount,
+            ext_data_hash,
+            input_nullifier[0],
+            input_nullifier[1],
+            output_commitment[0],
+            output_commitment[1],
         };
 
         // 4. 验证 ZK 证明
-        if (!try verify(WithdrawVerifyingKey, &proof, &public_inputs)) {
+        if (!try verify(TransactionVerifyingKey, &proof, &public_inputs)) {
             return error.InvalidProof;
         }
 
         // 5. 记录 nullifier
-        try ctx.accounts.nullifier_set.data.nullifiers.insert(nullifier_hash);
-
-        // 6. 计算实际转账金额
-        const amount = pool.data.denomination - fee;
-
-        // 7. 转账给接收者
-        try anchor.token.transfer(
-            ctx.accounts.pool_vault,
-            ctx.accounts.recipient_ata,
-            ctx.accounts.pool_authority,
-            amount,
-            &pool.pda_seeds(),
-        );
-
-        // 8. 如果有 relayer 费用，转给 relayer
-        if (fee > 0) {
-            // ... 转给 relayer
+        for (input_nullifier) |nullifier_hash| {
+            try ctx.accounts.nullifier_set.data.nullifiers.insert(nullifier_hash);
         }
 
-        // 9. 发射事件
+        // 6. 插入输出 commitment 到 Merkle 树
+        _ = try ctx.accounts.merkle_tree.data.tree.insert(output_commitment[0]);
+        _ = try ctx.accounts.merkle_tree.data.tree.insert(output_commitment[1]);
+
+        // 7. 根据 public_amount 执行外部转账
+        // public_amount > 0: deposit, public_amount < 0: withdraw
+        // ext_data_hash 绑定 recipient、fee 等外部数据
+
+        // 8. 发射事件
         ctx.emit(WithdrawEvent, .{
-            .nullifier_hash = nullifier_hash,
-            .recipient = recipient,
-            .amount = amount,
+            .nullifier_hash = input_nullifier[0],
+            .recipient = ctx.accounts.recipient_ata.key(),
+            .amount = pool.data.denomination,
             .timestamp = sol.clock.get().unix_timestamp,
         });
     }
 };
 
 // 辅助函数
-fn pubkeyToField(pubkey: sol.PublicKey) [32]u8 {
-    return pubkey.bytes;
-}
-
 fn u64ToField(value: u64) [32]u8 {
     var result = [_]u8{0} ** 32;
     std.mem.writeInt(u64, result[0..8], value, .little);
@@ -597,56 +595,87 @@ fn u64ToField(value: u64) [32]u8 {
 
 ## CPI 适配器
 
-### DFlow Adapter
+### Jupiter Adapter
 
 ```zig
-//! DFlow CPI Adapter
+//! Jupiter CPI Adapter (V6)
 //!
-//! 集成 DFlow 订单流拍卖
+//! 使用 sharedAccountsRoute 以池 PDA 作为转账授权
 
-pub const DFlowAdapter = struct {
+pub const JupiterAdapter = struct {
     pub const PROGRAM_ID = sol.PublicKey.comptimeFromBase58(
-        "DFLoW1111111111111111111111111111111111111"
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
     );
 
-    /// 提交订单到 DFlow 拍卖
-    pub fn submitOrder(
-        source_ata: *const anchor.TokenAccount,
-        dest_ata: *const anchor.TokenAccount,
-        authority: *const sol.PublicKey,
-        signer_seeds: []const []const u8,
-        input_amount: u64,
-        min_output: u64,
-    ) !u64 {
-        // 构建 DFlow swap 指令
-        const ix_data = encodeSwapInstruction(.{
-            .amount_in = input_amount,
-            .minimum_amount_out = min_output,
-        });
+    /// 提交 swap 到 Jupiter
+    ///
+    /// Accounts (sharedAccountsRoute):
+    /// 0. token_program
+    /// 1. program_authority
+    /// 2. user_transfer_authority
+    /// 3. source_token_account
+    /// 4. program_source_token_account
+    /// 5. program_destination_token_account
+    /// 6. destination_token_account
+    /// 7. source_mint
+    /// 8. destination_mint
+    /// 9. platform_fee_account
+    /// 10. token_2022_program
+    /// 11. event_authority
+    /// 12. program
+    pub fn submitSwap(
+        route_plan: []const u8,
+        program_authority: sol.PublicKey,
+        user_transfer_authority: sol.PublicKey,
+        source_token_account: sol.PublicKey,
+        program_source_token_account: sol.PublicKey,
+        program_destination_token_account: sol.PublicKey,
+        destination_token_account: sol.PublicKey,
+        source_mint: sol.PublicKey,
+        destination_mint: sol.PublicKey,
+        platform_fee_account: sol.PublicKey,
+        token_program: sol.PublicKey,
+        token_2022_program: sol.PublicKey,
+        event_authority: sol.PublicKey,
+        in_amount: u64,
+        quoted_out_amount: u64,
+        slippage_bps: u16,
+        platform_fee_bps: u8,
+        authority_seeds: []const []const u8,
+    ) !void {
+        // TODO: 构建 sharedAccountsRoute 指令数据
+        _ = route_plan;
+        _ = in_amount;
+        _ = quoted_out_amount;
+        _ = slippage_bps;
+        _ = platform_fee_bps;
 
         const ix = sol.instruction.Instruction{
             .program_id = &PROGRAM_ID,
             .accounts = &[_]sol.instruction.AccountMeta{
-                .{ .pubkey = source_ata.key(), .is_signer = false, .is_writable = true },
-                .{ .pubkey = dest_ata.key(), .is_signer = false, .is_writable = true },
-                .{ .pubkey = authority, .is_signer = true, .is_writable = false },
-                // ... 其他必要账户
+                .{ .pubkey = token_program, .is_signer = false, .is_writable = false },
+                .{ .pubkey = program_authority, .is_signer = false, .is_writable = false },
+                .{ .pubkey = user_transfer_authority, .is_signer = true, .is_writable = false },
+                .{ .pubkey = source_token_account, .is_signer = false, .is_writable = true },
+                .{ .pubkey = program_source_token_account, .is_signer = false, .is_writable = true },
+                .{ .pubkey = program_destination_token_account, .is_signer = false, .is_writable = true },
+                .{ .pubkey = destination_token_account, .is_signer = false, .is_writable = true },
+                .{ .pubkey = source_mint, .is_signer = false, .is_writable = false },
+                .{ .pubkey = destination_mint, .is_signer = false, .is_writable = false },
+                .{ .pubkey = platform_fee_account, .is_signer = false, .is_writable = true },
+                .{ .pubkey = token_2022_program, .is_signer = false, .is_writable = false },
+                .{ .pubkey = event_authority, .is_signer = false, .is_writable = false },
+                .{ .pubkey = PROGRAM_ID, .is_signer = false, .is_writable = false },
             },
-            .data = ix_data,
+            .data = route_plan,
         };
 
-        // 执行 CPI
         try ix.invokeSigned(
             &[_]sol.account.Account.Info{
-                source_ata.to_account_info(),
-                dest_ata.to_account_info(),
-                // ...
+                // 账户列表由调用方提供
             },
-            &[_][]const []const u8{signer_seeds},
+            &[_][]const []const u8{authority_seeds},
         );
-
-        // 返回输出金额
-        return dest_ata.amount;
     }
 };
 ```
@@ -699,9 +728,9 @@ pub const MarinadeAdapter = struct {
 import { groth16 } from 'snarkjs';
 import { buildPoseidon } from 'circomlibjs';
 
-// 电路文件路径
-const WASM_PATH = '/circuits/withdraw.wasm';
-const ZKEY_PATH = '/circuits/withdraw_final.zkey';
+// 电路文件路径 (Privacy Cash transaction2)
+const WASM_PATH = '/circuits/transaction2.wasm';
+const ZKEY_PATH = '/circuits/transaction2.zkey';
 
 // Poseidon 哈希
 let poseidon: any;
@@ -714,22 +743,14 @@ export function poseidonHash(inputs: bigint[]): bigint {
   return poseidon.F.toObject(poseidon(inputs));
 }
 
-// 生成 commitment
-export function generateCommitment(): {
-  nullifier: bigint;
-  secret: bigint;
-  commitment: bigint;
-} {
-  const nullifier = randomBigInt(31);
-  const secret = randomBigInt(31);
-  const commitment = poseidonHash([nullifier, secret]);
-
-  return { nullifier, secret, commitment };
-}
-
-// 生成 nullifier hash
-export function generateNullifierHash(nullifier: bigint): bigint {
-  return poseidonHash([nullifier]);
+// 生成 UTXO commitment
+export function generateCommitment(
+  amount: bigint,
+  pubkey: bigint,
+  blinding: bigint,
+  mintAddress: bigint,
+): bigint {
+  return poseidonHash([amount, pubkey, blinding, mintAddress]);
 }
 
 // 生成 Merkle proof
@@ -744,34 +765,45 @@ export function generateMerkleProof(
 }
 
 // 生成 ZK 证明
-export async function generateWithdrawProof(
-  // Private inputs
-  nullifier: bigint,
-  secret: bigint,
-  pathElements: bigint[],
-  pathIndices: number[],
+export async function generateTransactionProof(
+  // Private inputs (JoinSplit)
+  inAmount: bigint[],
+  inPrivateKey: bigint[],
+  inBlinding: bigint[],
+  inPathIndices: bigint[],
+  inPathElements: bigint[][],
+  outAmount: bigint[],
+  outPubkey: bigint[],
+  outBlinding: bigint[],
+  mintAddress: bigint,
   // Public inputs
   root: bigint,
-  recipient: string,
-  relayer: string,
-  fee: bigint,
+  publicAmount: bigint,
+  extDataHash: bigint,
+  inputNullifier: bigint[],
+  outputCommitment: bigint[],
 ): Promise<{
   proof: Uint8Array;
   publicInputs: bigint[];
 }> {
   const input = {
     // Private
-    nullifier: nullifier.toString(),
-    secret: secret.toString(),
-    pathElements: pathElements.map(e => e.toString()),
-    pathIndices,
+    inAmount: inAmount.map(v => v.toString()),
+    inPrivateKey: inPrivateKey.map(v => v.toString()),
+    inBlinding: inBlinding.map(v => v.toString()),
+    inPathIndices: inPathIndices.map(v => v.toString()),
+    inPathElements: inPathElements.map(p => p.map(v => v.toString())),
+    outAmount: outAmount.map(v => v.toString()),
+    outPubkey: outPubkey.map(v => v.toString()),
+    outBlinding: outBlinding.map(v => v.toString()),
+    mintAddress: mintAddress.toString(),
 
     // Public
     root: root.toString(),
-    nullifierHash: poseidonHash([nullifier]).toString(),
-    recipient: addressToField(recipient).toString(),
-    relayer: addressToField(relayer).toString(),
-    fee: fee.toString(),
+    publicAmount: publicAmount.toString(),
+    extDataHash: extDataHash.toString(),
+    inputNullifier: inputNullifier.map(v => v.toString()),
+    outputCommitment: outputCommitment.map(v => v.toString()),
   };
 
   // 生成证明
@@ -933,7 +965,7 @@ const vk = JSON.parse(fs.readFileSync(process.argv[2]));
 console.log('// Auto-generated from verification_key.json');
 console.log('const bn254 = @import("bn254.zig");');
 console.log('');
-console.log('pub const WithdrawVerifyingKey = struct {');
+console.log('pub const TransactionVerifyingKey = struct {');
 console.log(`    pub const NUM_PUBLIC_INPUTS = ${vk.IC.length - 1};`);
 console.log('');
 
@@ -971,20 +1003,24 @@ test "groth16: verify known proof" {
         .c = bn254.G1Point.fromHex("..."),
     };
 
-    const public_inputs = [5][32]u8{
+    const public_inputs = [7][32]u8{
         // root
         hexToBytes("..."),
-        // nullifierHash
+        // publicAmount
         hexToBytes("..."),
-        // recipient
+        // extDataHash
         hexToBytes("..."),
-        // relayer
+        // inputNullifier[0]
         hexToBytes("..."),
-        // fee
+        // inputNullifier[1]
+        hexToBytes("..."),
+        // outputCommitment[0]
+        hexToBytes("..."),
+        // outputCommitment[1]
         hexToBytes("..."),
     };
 
-    const result = try verify(WithdrawVerifyingKey, &proof, &public_inputs);
+    const result = try verify(TransactionVerifyingKey, &proof, &public_inputs);
     try std.testing.expect(result == true);
 }
 ```
