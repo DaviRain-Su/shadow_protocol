@@ -680,6 +680,35 @@ pub const JupiterAdapter = struct {
 };
 ```
 
+### 可见性与隐私边界
+
+```text
+User Wallet
+  |  deposit(commitment)
+  v
+Pool Program (PDA authority)
+  |  vault PDA holds pooled funds
+  |  emits deposit/withdraw/swap logs
+  v
+Jupiter CPI (sharedAccountsRoute)
+  |  route plan + accounts are visible
+  v
+AMM Programs / Token Accounts
+```
+
+**链上可见**:
+1. deposit/withdraw/swap 指令与日志
+2. Jupiter CPI + route plan（AMM 路径与参数）
+3. 参与账户（vault PDA、token accounts、mints）
+4. token 余额变化
+
+**链上不可直接关联**:
+1. 具体哪个用户触发 swap
+2. deposit 与后续 swap 的直接对应关系
+3. commitment 与 swap 的内部映射
+
+**结论**: 可见“池子在 swap”，不可见“哪个用户在 swap”。
+
 ### Marinade Adapter
 
 ```zig
