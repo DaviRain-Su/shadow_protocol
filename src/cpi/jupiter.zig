@@ -281,6 +281,32 @@ test "encodeRoutePlanSteps: length" {
     try std.testing.expectEqual(@as(usize, 4), encoded.bytes.len);
 }
 
+test "encodeRoutePlanSteps: empty" {
+    const allocator = std.testing.allocator;
+    const encoded = try encodeRoutePlanSteps(allocator, &.{});
+    defer allocator.free(encoded.bytes);
+
+    try std.testing.expectEqual(@as(u32, 0), encoded.len);
+    try std.testing.expectEqual(@as(usize, 0), encoded.bytes.len);
+}
+
+test "buildSharedAccountsRouteDataInto: buffer too small" {
+    var buffer: [10]u8 = undefined;
+    const args = SharedAccountsRouteArgs{
+        .id = 0,
+        .route_plan_len = 0,
+        .in_amount = 1,
+        .quoted_out_amount = 1,
+        .slippage_bps = 0,
+        .platform_fee_bps = 0,
+    };
+
+    try std.testing.expectError(
+        error.BufferTooSmall,
+        buildSharedAccountsRouteDataInto(buffer[0..], args, &.{}),
+    );
+}
+
 /// Accounts for sharedAccountsRoute CPI.
 ///
 /// Account order matches Jupiter V6 IDL.

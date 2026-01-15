@@ -14,6 +14,7 @@ const TransactionInputs = shadow.verifier.TransactionInputs;
 const PoolState = shadow.state.PoolState;
 const MerkleTreeState = shadow.state.MerkleTreeState;
 const NullifierState = shadow.state.NullifierState;
+const PoolVault = shadow.state.PoolVault;
 
 const jupiter = shadow.cpi;
 
@@ -53,6 +54,37 @@ const NullifierAccountInit = anchor.Account(NullifierState, .{
     .init = true,
     .payer = "authority",
     .space = @sizeOf(NullifierState),
+});
+
+const MintAccount = anchor.Mint(.{
+    .token_program = "token_program",
+});
+
+const SourceTokenAccount = anchor.TokenAccount(.{
+    .mut = true,
+    .mint = "source_mint",
+    .authority = "user_transfer_authority",
+    .token_program = "token_program",
+});
+
+const ProgramSourceTokenAccount = anchor.TokenAccount(.{
+    .mut = true,
+    .mint = "source_mint",
+    .authority = "program_authority",
+    .token_program = "token_program",
+});
+
+const ProgramDestinationTokenAccount = anchor.TokenAccount(.{
+    .mut = true,
+    .mint = "destination_mint",
+    .authority = "program_authority",
+    .token_program = "token_program",
+});
+
+const DestinationTokenAccount = anchor.TokenAccount(.{
+    .mut = true,
+    .mint = "destination_mint",
+    .token_program = "token_program",
 });
 
 /// Initialize instruction args.
@@ -120,15 +152,15 @@ const UnpauseAccounts = struct {
 
 const SwapAccounts = struct {
     pool: PoolAccount,
-    token_program: anchor.Unchecked,
+    token_program: anchor.Program(sol.spl.token.ID),
     program_authority: anchor.Unchecked,
     user_transfer_authority: anchor.Signer,
-    source_token_account: anchor.Unchecked,
-    program_source_token_account: anchor.Unchecked,
-    program_destination_token_account: anchor.Unchecked,
-    destination_token_account: anchor.Unchecked,
-    source_mint: anchor.Unchecked,
-    destination_mint: anchor.Unchecked,
+    source_token_account: SourceTokenAccount,
+    program_source_token_account: ProgramSourceTokenAccount,
+    program_destination_token_account: ProgramDestinationTokenAccount,
+    destination_token_account: DestinationTokenAccount,
+    source_mint: MintAccount,
+    destination_mint: MintAccount,
     platform_fee_account: anchor.Unchecked,
     token_2022_program: anchor.Unchecked,
     event_authority: anchor.Unchecked,
@@ -151,6 +183,17 @@ pub const Program = struct {
         if (args.denomination == 0) return error.InvalidInstructionData;
         if (args.merkle_depth == 0 or args.merkle_depth > 26) return error.InvalidInstructionData;
 
+        const pool_pda = PublicKey.findProgramAddress(
+            .{
+                PoolState.SEEDS_PREFIX,
+                ctx.accounts.token_mint.id.*.bytes[0..],
+            },
+            PROGRAM_ID,
+        ) catch return error.InvalidInstructionData;
+        if (!pool_pda.address.equals(ctx.accounts.pool.key().*)) {
+            return error.InvalidInstructionData;
+        }
+
         const initial_root = shadow.state.ZERO_VALUES[args.merkle_depth];
 
         ctx.accounts.pool.data = PoolState.init(
@@ -159,7 +202,7 @@ pub const Program = struct {
             args.denomination,
             args.merkle_depth,
             initial_root,
-            0,
+            pool_pda.bump_seed[0],
         );
 
         ctx.accounts.merkle_tree.data = MerkleTreeState.init(
@@ -172,10 +215,17 @@ pub const Program = struct {
             0,
         );
 
+        ctx.emit(InitializeEvent, .{
+            .pool = ctx.accounts.pool.key().*,
+            .token_mint = ctx.accounts.token_mint.id.*,
+            .denomination = args.denomination,
+            .merkle_depth = args.merkle_depth,
+        });
         sol.log.log("Shadow Pool initialized");
     }
 
     pub fn deposit(ctx: anchor.Context(DepositAccounts), args: DepositArgs) !void {
+        try validatePoolPda(&ctx.accounts.pool);
         if (ctx.accounts.pool.data.paused) return error.InvalidInstructionData;
 
         const zero = [_]u8{0} ** 32;
@@ -186,10 +236,16 @@ pub const Program = struct {
         ctx.accounts.pool.data.merkle_root = ctx.accounts.merkle_tree.data.root;
         ctx.accounts.pool.data.next_leaf_index = ctx.accounts.merkle_tree.data.next_index;
 
+        ctx.emit(DepositEvent, .{
+            .pool = ctx.accounts.pool.key().*,
+            .commitment = args.commitment,
+            .leaf_index = ctx.accounts.merkle_tree.data.next_index - 1,
+        });
         sol.log.log("Deposit successful");
     }
 
     pub fn withdraw(ctx: anchor.Context(WithdrawAccounts), args: WithdrawArgs) !void {
+        try validatePoolPda(&ctx.accounts.pool);
         if (ctx.accounts.pool.data.paused) return error.InvalidInstructionData;
 
         if (!ctx.accounts.merkle_tree.data.isKnownRoot(args.root)) {
@@ -228,26 +284,42 @@ pub const Program = struct {
             ctx.accounts.nullifier_set.data.add(nullifier);
         }
 
+        ctx.emit(WithdrawEvent, .{
+            .pool = ctx.accounts.pool.key().*,
+            .input_nullifier = args.input_nullifier,
+            .output_commitment = args.output_commitment,
+        });
         sol.log.log("Withdrawal successful");
     }
 
     pub fn pause(ctx: anchor.Context(PauseAccounts)) !void {
+        try validatePoolPda(&ctx.accounts.pool);
         if (!ctx.accounts.pool.data.authority.equals(ctx.accounts.authority.key().*)) {
             return error.InvalidInstructionData;
         }
         ctx.accounts.pool.data.paused = true;
+        ctx.emit(PauseEvent, .{
+            .pool = ctx.accounts.pool.key().*,
+            .paused = true,
+        });
         sol.log.log("Pool paused");
     }
 
     pub fn unpause(ctx: anchor.Context(UnpauseAccounts)) !void {
+        try validatePoolPda(&ctx.accounts.pool);
         if (!ctx.accounts.pool.data.authority.equals(ctx.accounts.authority.key().*)) {
             return error.InvalidInstructionData;
         }
         ctx.accounts.pool.data.paused = false;
+        ctx.emit(PauseEvent, .{
+            .pool = ctx.accounts.pool.key().*,
+            .paused = false,
+        });
         sol.log.log("Pool unpaused");
     }
 
     pub fn swap(ctx: anchor.Context(SwapAccounts), args: SwapArgs) !void {
+        try validatePoolPda(&ctx.accounts.pool);
         if (ctx.accounts.pool.data.paused) return error.InvalidInstructionData;
 
         if (args.id >= 8) return error.InvalidInstructionData;
@@ -275,15 +347,27 @@ pub const Program = struct {
             return error.InvalidInstructionData;
         }
 
-        const pool_seeds = [_][]const u8{
-            PoolState.SEEDS_PREFIX,
-            &ctx.accounts.pool.data.token_mint.bytes,
-        };
-        const pool_pda = PublicKey.findProgramAddress(pool_seeds, PROGRAM_ID);
-        if (!pool_pda.address.equals(ctx.accounts.pool.key().*)) {
-            return error.InvalidInstructionData;
-        }
-        if (!pool_pda.address.equals(ctx.accounts.user_transfer_authority.key().*)) {
+        const pool_mint = ctx.accounts.pool.data.token_mint;
+        const source_mint = ctx.accounts.source_mint.key().*;
+        const destination_mint = ctx.accounts.destination_mint.key().*;
+        try validateSwapVaults(
+            ctx.accounts.pool.key().*,
+            pool_mint,
+            source_mint,
+            destination_mint,
+            ctx.accounts.source_token_account.key().*,
+            ctx.accounts.destination_token_account.key().*,
+        );
+
+        const pool_expected = PublicKey.createProgramAddress(
+            .{
+                PoolState.SEEDS_PREFIX,
+                ctx.accounts.pool.data.token_mint.bytes[0..],
+                &[_]u8{ctx.accounts.pool.data.bump},
+            },
+            PROGRAM_ID,
+        ) catch return error.InvalidInstructionData;
+        if (!pool_expected.equals(ctx.accounts.user_transfer_authority.key().*)) {
             return error.InvalidInstructionData;
         }
 
@@ -305,15 +389,15 @@ pub const Program = struct {
         );
 
         const cpi_accounts = jupiter.SharedAccountsRouteAccounts{
-            .token_program = ctx.accounts.token_program,
+            .token_program = ctx.accounts.token_program.toAccountInfo(),
             .program_authority = ctx.accounts.program_authority,
             .user_transfer_authority = ctx.accounts.user_transfer_authority.toAccountInfo(),
-            .source_token_account = ctx.accounts.source_token_account,
-            .program_source_token_account = ctx.accounts.program_source_token_account,
-            .program_destination_token_account = ctx.accounts.program_destination_token_account,
-            .destination_token_account = ctx.accounts.destination_token_account,
-            .source_mint = ctx.accounts.source_mint,
-            .destination_mint = ctx.accounts.destination_mint,
+            .source_token_account = ctx.accounts.source_token_account.toAccountInfo(),
+            .program_source_token_account = ctx.accounts.program_source_token_account.toAccountInfo(),
+            .program_destination_token_account = ctx.accounts.program_destination_token_account.toAccountInfo(),
+            .destination_token_account = ctx.accounts.destination_token_account.toAccountInfo(),
+            .source_mint = ctx.accounts.source_mint.toAccountInfo(),
+            .destination_mint = ctx.accounts.destination_mint.toAccountInfo(),
             .platform_fee_account = ctx.accounts.platform_fee_account,
             .token_2022_program = ctx.accounts.token_2022_program,
             .event_authority = ctx.accounts.event_authority,
@@ -322,14 +406,139 @@ pub const Program = struct {
 
         const signer_seeds = [_][]const u8{
             PoolState.SEEDS_PREFIX,
-            &ctx.accounts.pool.data.token_mint.bytes,
-            &[_]u8{pool_pda.bump},
+            ctx.accounts.pool.data.token_mint.bytes[0..],
+            &[_]u8{ctx.accounts.pool.data.bump},
         };
         try jupiter.invokeSharedAccountsRoute(cpi_accounts, buffer[0..ix_len], signer_seeds[0..]);
 
+        ctx.emit(SwapEvent, .{
+            .pool = ctx.accounts.pool.key().*,
+            .source_mint = source_mint,
+            .destination_mint = destination_mint,
+            .in_amount = args.in_amount,
+            .quoted_out_amount = args.quoted_out_amount,
+        });
         sol.log.log("Swap successful");
     }
 };
+
+fn validatePoolPda(pool: *const PoolAccount) !void {
+    const expected = PublicKey.createProgramAddress(
+        .{
+            PoolState.SEEDS_PREFIX,
+            pool.data.token_mint.bytes[0..],
+            &[_]u8{pool.data.bump},
+        },
+        PROGRAM_ID,
+    ) catch return error.InvalidInstructionData;
+    if (!expected.equals(pool.key().*)) return error.InvalidInstructionData;
+}
+
+fn validateSwapVaults(
+    pool_key: PublicKey,
+    pool_mint: PublicKey,
+    source_mint: PublicKey,
+    destination_mint: PublicKey,
+    source_token_account: PublicKey,
+    destination_token_account: PublicKey,
+) !void {
+    const vault_pda = PoolVault.derivePda(pool_key, PROGRAM_ID);
+    if (source_mint.equals(pool_mint)) {
+        if (!source_token_account.equals(vault_pda.address)) {
+            return error.InvalidInstructionData;
+        }
+    }
+    if (destination_mint.equals(pool_mint)) {
+        if (!destination_token_account.equals(vault_pda.address)) {
+            return error.InvalidInstructionData;
+        }
+    }
+}
+
+pub const InitializeEvent = struct {
+    pool: PublicKey,
+    token_mint: PublicKey,
+    denomination: u64,
+    merkle_depth: u8,
+};
+
+pub const DepositEvent = struct {
+    pool: PublicKey,
+    commitment: [32]u8,
+    leaf_index: u32,
+};
+
+pub const WithdrawEvent = struct {
+    pool: PublicKey,
+    input_nullifier: [2][32]u8,
+    output_commitment: [2][32]u8,
+};
+
+pub const PauseEvent = struct {
+    pool: PublicKey,
+    paused: bool,
+};
+
+pub const SwapEvent = struct {
+    pool: PublicKey,
+    source_mint: PublicKey,
+    destination_mint: PublicKey,
+    in_amount: u64,
+    quoted_out_amount: u64,
+};
+
+test "swap vault validation: source mint uses vault" {
+    const pool_key = PublicKey.from([_]u8{1} ** 32);
+    const pool_mint = PublicKey.from([_]u8{2} ** 32);
+    const source_mint = pool_mint;
+    const destination_mint = PublicKey.from([_]u8{3} ** 32);
+    const vault = PoolVault.derivePda(pool_key, PROGRAM_ID).address;
+
+    try validateSwapVaults(
+        pool_key,
+        pool_mint,
+        source_mint,
+        destination_mint,
+        vault,
+        PublicKey.from([_]u8{4} ** 32),
+    );
+}
+
+test "swap vault validation: destination mint uses vault" {
+    const pool_key = PublicKey.from([_]u8{5} ** 32);
+    const pool_mint = PublicKey.from([_]u8{6} ** 32);
+    const source_mint = PublicKey.from([_]u8{7} ** 32);
+    const destination_mint = pool_mint;
+    const vault = PoolVault.derivePda(pool_key, PROGRAM_ID).address;
+
+    try validateSwapVaults(
+        pool_key,
+        pool_mint,
+        source_mint,
+        destination_mint,
+        PublicKey.from([_]u8{8} ** 32),
+        vault,
+    );
+}
+
+test "swap vault validation: rejects non-vault account" {
+    const pool_key = PublicKey.from([_]u8{9} ** 32);
+    const pool_mint = PublicKey.from([_]u8{10} ** 32);
+    const source_mint = pool_mint;
+    const destination_mint = pool_mint;
+
+    try std.testing.expectError(
+        error.InvalidInstructionData,
+        validateSwapVaults(
+            pool_key,
+            pool_mint,
+            source_mint,
+            destination_mint,
+            PublicKey.from([_]u8{11} ** 32),
+            PublicKey.from([_]u8{12} ** 32),
+        ),
+    );
+}
 
 pub fn processInstruction(
     program_id: *const PublicKey,
