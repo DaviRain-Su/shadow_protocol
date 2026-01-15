@@ -169,7 +169,9 @@ pub const Groth16Verifier = struct {
         }
 
         // Step 2: Negate proof.a for the pairing check
-        const neg_a = proof.a.negate();
+        // Negation of G1 point (x, y) is (x, -y) where -y = p - y mod p
+        // Using subtraction: -A = identity - A
+        const neg_a = try bn254.subG1Points(bn254.G1Point.identity(), proof.a);
 
         // Step 3: Prepare pairing input
         // Check: e(-A, B) · e(α, β) · e(vk_x, γ) · e(C, δ) = 1

@@ -1,2 +1,7 @@
 .zig-cache
 zig-out
+instruction-parser
+jupiter-cpi
+privacy-cash
+solana-zig
+dflow-amm-interface

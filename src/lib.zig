@@ -37,6 +37,9 @@ pub const state = @import("state/mod.zig");
 // Re-export verifier modules
 pub const verifier = @import("verifier/groth16.zig");
 
+// Re-export CPI adapters
+pub const cpi = @import("cpi/jupiter.zig");
+
 // Type aliases for convenience
 pub const PoolState = state.PoolState;
 pub const MerkleTreeState = state.MerkleTreeState;
