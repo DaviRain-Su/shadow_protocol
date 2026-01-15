@@ -250,6 +250,43 @@ pub const Program = struct {
     pub fn swap(ctx: anchor.Context(SwapAccounts), args: SwapArgs) !void {
         if (ctx.accounts.pool.data.paused) return error.InvalidInstructionData;
 
+        if (args.id >= 8) return error.InvalidInstructionData;
+
+        const jupiter_program_info = ctx.accounts.jupiter_program.toAccountInfo();
+        if (!jupiter_program_info.id.*.equals(jupiter.PROGRAM_ID)) {
+            return error.InvalidInstructionData;
+        }
+
+        const jupiter_authority_seeds = [_][]const u8{ "authority", &[_]u8{args.id} };
+        const jupiter_authority = PublicKey.findProgramAddress(
+            jupiter_authority_seeds,
+            jupiter.PROGRAM_ID,
+        );
+        if (!ctx.accounts.program_authority.id.*.equals(jupiter_authority.address)) {
+            return error.InvalidInstructionData;
+        }
+
+        const jupiter_event_authority_seeds = [_][]const u8{ "__event_authority" };
+        const jupiter_event_authority = PublicKey.findProgramAddress(
+            jupiter_event_authority_seeds,
+            jupiter.PROGRAM_ID,
+        );
+        if (!ctx.accounts.event_authority.id.*.equals(jupiter_event_authority.address)) {
+            return error.InvalidInstructionData;
+        }
+
+        const pool_seeds = [_][]const u8{
+            PoolState.SEEDS_PREFIX,
+            &ctx.accounts.pool.data.token_mint.bytes,
+        };
+        const pool_pda = PublicKey.findProgramAddress(pool_seeds, PROGRAM_ID);
+        if (!pool_pda.address.equals(ctx.accounts.pool.key().*)) {
+            return error.InvalidInstructionData;
+        }
+        if (!pool_pda.address.equals(ctx.accounts.user_transfer_authority.key().*)) {
+            return error.InvalidInstructionData;
+        }
+
         const required = 8 + 1 + 4 + args.route_plan_bytes.len + 8 + 8 + 2 + 1;
         if (required > 2048) return error.InvalidInstructionData;
 
@@ -283,7 +320,12 @@ pub const Program = struct {
             .program = ctx.accounts.jupiter_program.toAccountInfo(),
         };
 
-        try jupiter.invokeSharedAccountsRoute(cpi_accounts, buffer[0..ix_len], &.{});
+        const signer_seeds = [_][]const u8{
+            PoolState.SEEDS_PREFIX,
+            &ctx.accounts.pool.data.token_mint.bytes,
+            &[_]u8{pool_pda.bump},
+        };
+        try jupiter.invokeSharedAccountsRoute(cpi_accounts, buffer[0..ix_len], signer_seeds[0..]);
 
         sol.log.log("Swap successful");
     }
