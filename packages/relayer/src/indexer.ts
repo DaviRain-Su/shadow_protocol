@@ -28,10 +28,14 @@ export class IndexerMerkleTree {
   private leaves: string[] = [];
   private height: number;
   private zeroValues: string[] = [];
+  private rootHistory: string[] = [];
+  private readonly maxRootHistory: number = 100; // Keep last 100 roots
 
   constructor(height: number = MERKLE_TREE_HEIGHT) {
     this.height = height;
     this.initZeroValues();
+    // Initialize with empty tree root
+    this.rootHistory.push(this.getRoot());
   }
 
   private initZeroValues(): void {
@@ -65,7 +69,40 @@ export class IndexerMerkleTree {
   insert(leaf: string): number {
     const index = this.leaves.length;
     this.leaves.push(leaf);
+
+    // Update root history after insertion
+    const newRoot = this.getRoot();
+    this.addRootToHistory(newRoot);
+
     return index;
+  }
+
+  /**
+   * Add a root to history, maintaining max size
+   */
+  private addRootToHistory(root: string): void {
+    // Only add if different from last root
+    if (this.rootHistory.length === 0 || this.rootHistory[this.rootHistory.length - 1] !== root) {
+      this.rootHistory.push(root);
+      // Trim if exceeds max
+      if (this.rootHistory.length > this.maxRootHistory) {
+        this.rootHistory.shift();
+      }
+    }
+  }
+
+  /**
+   * Check if a root is valid (current or in history)
+   */
+  isKnownRoot(root: string): boolean {
+    return this.rootHistory.includes(root);
+  }
+
+  /**
+   * Get root history
+   */
+  getRootHistory(): string[] {
+    return [...this.rootHistory];
   }
 
   /**
@@ -187,7 +224,7 @@ export class IndexerMerkleTree {
     return {
       root: this.getRoot(),
       nextIndex: this.leaves.length,
-      rootHistory: [], // TODO: Track historical roots
+      rootHistory: this.getRootHistory(),
       leaves: this.getLeaves(),
     };
   }
@@ -197,6 +234,12 @@ export class IndexerMerkleTree {
    */
   importState(state: MerkleTreeState): void {
     this.leaves = [...state.leaves];
+    this.rootHistory = [...(state.rootHistory || [])];
+    // Ensure current root is in history
+    const currentRoot = this.getRoot();
+    if (!this.rootHistory.includes(currentRoot)) {
+      this.rootHistory.push(currentRoot);
+    }
   }
 }
 
@@ -450,6 +493,20 @@ export class PrivacyCashIndexer {
    */
   addCommitment(commitment: string): number {
     return this.merkleTree.insert(commitment);
+  }
+
+  /**
+   * Check if a root is known (current or in history)
+   */
+  isKnownRoot(root: string): boolean {
+    return this.merkleTree.isKnownRoot(root);
+  }
+
+  /**
+   * Get root history
+   */
+  getRootHistory(): string[] {
+    return this.merkleTree.getRootHistory();
   }
 
   /**

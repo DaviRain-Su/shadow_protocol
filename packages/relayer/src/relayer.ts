@@ -244,11 +244,17 @@ export class PrivacyCashRelayer {
         };
       }
 
-      // Verify Merkle proof if provided
+      // Verify Merkle root is valid (current or in history)
       const currentRoot = this.indexer.getMerkleRoot();
       if (request.root !== currentRoot) {
-        // Check if root is in history (TODO: implement root history)
-        console.warn('[Relayer] Root mismatch, using current root');
+        // Check if root is in history
+        if (!this.indexer.isKnownRoot(request.root)) {
+          return {
+            success: false,
+            error: 'Invalid Merkle root: not found in current state or history',
+          };
+        }
+        console.log('[Relayer] Using historical root for verification');
       }
 
       // Build withdraw instruction data
@@ -315,6 +321,20 @@ export class PrivacyCashRelayer {
    */
   isNullifierUsed(nullifier: string): boolean {
     return this.indexer.isNullifierUsed(nullifier);
+  }
+
+  /**
+   * Check if a Merkle root is valid (current or in history)
+   */
+  isKnownRoot(root: string): boolean {
+    return this.indexer.isKnownRoot(root);
+  }
+
+  /**
+   * Get root history
+   */
+  getRootHistory(): string[] {
+    return this.indexer.getRootHistory();
   }
 
   /**

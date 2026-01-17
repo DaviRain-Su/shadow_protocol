@@ -79,6 +79,61 @@ describe('IndexerMerkleTree', () => {
       expect(newTree.getLeaves()).toEqual(['a', 'b']);
     });
   });
+
+  describe('root history', () => {
+    it('should track root history after inserts', () => {
+      const emptyRoot = tree.getRoot();
+      expect(tree.isKnownRoot(emptyRoot)).toBe(true);
+
+      tree.insert('a');
+      const rootAfterA = tree.getRoot();
+      expect(tree.isKnownRoot(rootAfterA)).toBe(true);
+      expect(tree.isKnownRoot(emptyRoot)).toBe(true);
+
+      tree.insert('b');
+      const rootAfterB = tree.getRoot();
+      expect(tree.isKnownRoot(rootAfterB)).toBe(true);
+      expect(tree.isKnownRoot(rootAfterA)).toBe(true);
+      expect(tree.isKnownRoot(emptyRoot)).toBe(true);
+    });
+
+    it('should return false for unknown root', () => {
+      expect(tree.isKnownRoot('unknown_root_12345')).toBe(false);
+    });
+
+    it('should include root history in export', () => {
+      tree.insert('a');
+      tree.insert('b');
+
+      const state = tree.exportState();
+      expect(state.rootHistory.length).toBeGreaterThan(0);
+      expect(state.rootHistory).toContain(tree.getRoot());
+    });
+
+    it('should restore root history on import', () => {
+      tree.insert('a');
+      const rootA = tree.getRoot();
+      tree.insert('b');
+      const rootB = tree.getRoot();
+
+      const state = tree.exportState();
+
+      const newTree = new IndexerMerkleTree(4);
+      newTree.importState(state);
+
+      expect(newTree.isKnownRoot(rootA)).toBe(true);
+      expect(newTree.isKnownRoot(rootB)).toBe(true);
+    });
+
+    it('should return root history array', () => {
+      tree.insert('a');
+      tree.insert('b');
+      tree.insert('c');
+
+      const history = tree.getRootHistory();
+      expect(history.length).toBeGreaterThanOrEqual(4); // empty + 3 inserts
+    });
+  });
 });
 
 describe('IndexerNullifierRegistry', () => {
