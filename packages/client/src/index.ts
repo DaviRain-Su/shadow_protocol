@@ -34,6 +34,9 @@ export type {
   PaymentResult,
   Px402Response,
   PaymentMode,
+  Transport,
+  TransportResponse,
+  RelayOptions,
 } from './types.js';
 export { X402_HEADERS, X402_VERSION } from './types.js';
 

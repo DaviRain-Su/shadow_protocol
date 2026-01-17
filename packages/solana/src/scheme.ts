@@ -10,10 +10,37 @@ import type {
   PaymentPayload,
   VerificationResult,
   SCHEME_NAMES,
+  RelayerConfig,
 } from '@px402/core';
 import type { SolanaPrivacyProvider } from './provider.js';
 
 // ============ Types ============
+
+/**
+ * Nullifier registry interface (from @px402/server)
+ * Redefined here to avoid circular dependency
+ */
+export interface NullifierRegistry {
+  register(info: {
+    nullifier: string;
+    txSignature: string;
+    registeredAt: number;
+    amount: string;
+    token: string;
+    recipient: string;
+  }): Promise<boolean>;
+  isUsed(nullifier: string): Promise<boolean>;
+}
+
+/**
+ * Relayer configuration for payment scheme
+ */
+export interface SchemeRelayerConfig {
+  /** Relayer API URL */
+  url: string;
+  /** Relayer fee in lamports */
+  fee: bigint;
+}
 
 /**
  * Private Cash scheme configuration
@@ -23,6 +50,10 @@ export interface PrivateCashSchemeConfig {
   provider: SolanaPrivacyProvider;
   /** Solana RPC endpoint */
   rpcUrl: string;
+  /** Nullifier registry for double-spend prevention (optional for client) */
+  nullifierRegistry?: NullifierRegistry;
+  /** Default relayer for anonymous transactions */
+  defaultRelayer?: SchemeRelayerConfig;
 }
 
 /**
@@ -39,6 +70,10 @@ export interface PrivateCashPayloadData {
   token: string;
   /** Timestamp */
   timestamp: number;
+  /** Relayer fee paid (if any) */
+  relayerFee?: string;
+  /** Relayer address (if any) */
+  relayerUrl?: string;
 }
 
 // ============ Scheme Implementation ============
@@ -53,10 +88,35 @@ export class PrivateCashScheme implements X402Scheme {
 
   private provider: SolanaPrivacyProvider;
   private connection: Connection;
+  private nullifierRegistry?: NullifierRegistry;
+  private defaultRelayer?: SchemeRelayerConfig;
 
   constructor(config: PrivateCashSchemeConfig) {
     this.provider = config.provider;
     this.connection = new Connection(config.rpcUrl, 'confirmed');
+    this.nullifierRegistry = config.nullifierRegistry;
+    this.defaultRelayer = config.defaultRelayer;
+  }
+
+  /**
+   * Set default relayer for anonymous transactions
+   */
+  setDefaultRelayer(relayer: SchemeRelayerConfig | undefined): void {
+    this.defaultRelayer = relayer;
+  }
+
+  /**
+   * Get current default relayer
+   */
+  getDefaultRelayer(): SchemeRelayerConfig | undefined {
+    return this.defaultRelayer;
+  }
+
+  /**
+   * Set nullifier registry (useful for late initialization)
+   */
+  setNullifierRegistry(registry: NullifierRegistry): void {
+    this.nullifierRegistry = registry;
   }
 
   /**
@@ -69,11 +129,16 @@ export class PrivateCashScheme implements X402Scheme {
     const { payTo, maxAmountRequired, asset } = requirements;
     const amount = BigInt(maxAmountRequired);
 
-    // 1. Find suitable note
-    const note = await this.provider.findNoteForPayment(asset, amount);
+    // Get relayer config (from requirements.extra or default)
+    const relayer = this.getRelayerConfig(requirements);
+    const relayerFee = relayer ? relayer.fee : 0n;
+    const totalRequired = amount + relayerFee;
+
+    // 1. Find suitable note (amount + relayer fee)
+    const note = await this.provider.findNoteForPayment(asset, totalRequired);
     if (!note) {
       throw new Error(
-        `Insufficient balance in privacy pool for ${asset}. Required: ${maxAmountRequired}`
+        `Insufficient balance in privacy pool for ${asset}. Required: ${totalRequired.toString()} (including ${relayerFee.toString()} relayer fee)`
       );
     }
 
@@ -82,6 +147,7 @@ export class PrivateCashScheme implements X402Scheme {
       note,
       recipient: payTo,
       amount,
+      relayer: relayer ? { url: relayer.url, fee: relayer.fee } : undefined,
     });
 
     // 3. Build payload data
@@ -91,6 +157,8 @@ export class PrivateCashScheme implements X402Scheme {
       amount: maxAmountRequired,
       token: asset,
       timestamp: proof.metadata.timestamp,
+      relayerFee: relayerFee > 0n ? relayerFee.toString() : undefined,
+      relayerUrl: relayer?.url,
     };
 
     // 4. Return x402 PaymentPayload
@@ -100,6 +168,28 @@ export class PrivateCashScheme implements X402Scheme {
       network: 'solana',
       payload: payloadData as unknown as Record<string, unknown>,
     };
+  }
+
+  /**
+   * Get relayer configuration from requirements or default
+   */
+  private getRelayerConfig(requirements: PaymentRequirements): SchemeRelayerConfig | undefined {
+    // Check for relayer in requirements.extra
+    const extra = requirements.extra;
+    if (extra?.relayer && typeof extra.relayer === 'object') {
+      const relayerExtra = extra.relayer as { url?: string; fee?: string | bigint };
+      if (relayerExtra.url && relayerExtra.fee !== undefined) {
+        return {
+          url: relayerExtra.url,
+          fee: typeof relayerExtra.fee === 'bigint'
+            ? relayerExtra.fee
+            : BigInt(relayerExtra.fee),
+        };
+      }
+    }
+
+    // Fall back to default relayer
+    return this.defaultRelayer;
   }
 
   /**
@@ -142,7 +232,18 @@ export class PrivateCashScheme implements X402Scheme {
       };
     }
 
-    // 3. Verify on-chain transaction
+    // 3. Check nullifier for double-spend (if registry available)
+    if (this.nullifierRegistry && data.nullifierHash) {
+      const isUsed = await this.nullifierRegistry.isUsed(data.nullifierHash);
+      if (isUsed) {
+        return {
+          valid: false,
+          reason: 'Double-spend detected: nullifier already used',
+        };
+      }
+    }
+
+    // 4. Verify on-chain transaction
     try {
       const tx = await this.connection.getTransaction(data.signature, {
         commitment: 'confirmed',
@@ -164,7 +265,7 @@ export class PrivateCashScheme implements X402Scheme {
         };
       }
 
-      // 4. Parse and verify transfer details
+      // 5. Parse and verify transfer details
       const verificationDetails = await this.verifyTransferDetails(
         tx,
         requirements.payTo,
@@ -176,12 +277,33 @@ export class PrivateCashScheme implements X402Scheme {
         return verificationDetails;
       }
 
+      // 6. Register nullifier to prevent double-spend
+      if (this.nullifierRegistry && data.nullifierHash) {
+        const registered = await this.nullifierRegistry.register({
+          nullifier: data.nullifierHash,
+          txSignature: data.signature,
+          registeredAt: Date.now(),
+          amount: data.amount,
+          token: data.token,
+          recipient: requirements.payTo,
+        });
+
+        if (!registered) {
+          // Race condition: another verification registered it first
+          return {
+            valid: false,
+            reason: 'Double-spend detected: nullifier registered by concurrent request',
+          };
+        }
+      }
+
       return {
         valid: true,
         details: {
           signature: data.signature,
           timestamp: data.timestamp,
           slot: tx.slot,
+          nullifierHash: data.nullifierHash,
         },
       };
     } catch (error) {

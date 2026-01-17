@@ -45,6 +45,20 @@ export {
   createPaymentRequirements,
 } from './middleware.js';
 
+// Nullifier Registry
+export {
+  MemoryNullifierRegistry,
+  createNullifierRegistry,
+  getGlobalNullifierRegistry,
+  setGlobalNullifierRegistry,
+} from './nullifier.js';
+
+export type {
+  NullifierInfo,
+  NullifierRegistry,
+  NullifierRegistryConfig,
+} from './nullifier.js';
+
 // Types
 export type {
   VerifierConfig,

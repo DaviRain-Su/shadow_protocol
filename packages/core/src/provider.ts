@@ -14,6 +14,7 @@ import type {
   PaymentProof,
   StealthAddress,
   PoolInfo,
+  RelayerConfig,
 } from './types.js';
 
 /**
@@ -26,6 +27,8 @@ export interface GenerateProofParams {
   recipient: string;
   /** Amount to pay */
   amount: bigint;
+  /** Optional relayer for anonymous transaction submission */
+  relayer?: RelayerConfig;
 }
 
 /**

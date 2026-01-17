@@ -145,6 +145,12 @@ importers:
         specifier: ^1.1.0
         version: 1.1.10(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@5.0.10)
     devDependencies:
+      '@px402/client':
+        specifier: workspace:*
+        version: link:../client
+      '@px402/server':
+        specifier: workspace:*
+        version: link:../server
       tsup:
         specifier: ^8.0.0
         version: 8.5.1(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)

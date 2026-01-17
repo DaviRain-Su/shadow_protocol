@@ -17,6 +17,8 @@ import type {
   PaymentResult,
   Px402Response,
   PaymentMode,
+  Transport,
+  TransportResponse,
 } from './types.js';
 import {
   parsePaymentRequirements,
@@ -37,12 +39,14 @@ export class Px402Client {
   private defaultMode: PaymentMode;
   private maxRetries: number;
   private paymentTimeout: number;
+  private transport?: Transport;
 
   constructor(config: Px402ClientConfig) {
     this.provider = config.provider;
     this.defaultMode = config.defaultMode || 'private';
     this.maxRetries = config.maxRetries || 3;
     this.paymentTimeout = config.paymentTimeout || 30000;
+    this.transport = config.transport;
 
     // Register provided schemes
     if (config.schemes) {
@@ -50,6 +54,20 @@ export class Px402Client {
         this.registerScheme(scheme);
       }
     }
+  }
+
+  /**
+   * Check if relay transport is available
+   */
+  hasTransport(): boolean {
+    return !!this.transport;
+  }
+
+  /**
+   * Get the transport (if available)
+   */
+  getTransport(): Transport | undefined {
+    return this.transport;
   }
 
   /**
@@ -92,9 +110,16 @@ export class Px402Client {
    */
   async fetch(url: string, init?: Px402RequestInit): Promise<Px402Response> {
     const paymentOptions = init?.payment;
+    const useRelay = init?.relay?.enabled && this.transport;
 
     // Make initial request
-    let response = await globalThis.fetch(url, init);
+    let response: Response;
+
+    if (useRelay) {
+      response = await this.fetchViaTransport(url, init);
+    } else {
+      response = await globalThis.fetch(url, init);
+    }
 
     // Check if payment is required
     if (!is402Response(response)) {
@@ -155,7 +180,7 @@ export class Px402Client {
     );
 
     // Retry request with payment header
-    const retryInit: RequestInit = {
+    const retryInit: Px402RequestInit = {
       ...init,
       headers: {
         ...init?.headers,
@@ -163,7 +188,11 @@ export class Px402Client {
       },
     };
 
-    response = await globalThis.fetch(url, retryInit);
+    if (useRelay) {
+      response = await this.fetchViaTransport(url, retryInit);
+    } else {
+      response = await globalThis.fetch(url, retryInit);
+    }
 
     // Check if payment was accepted
     if (is402Response(response)) {
@@ -225,6 +254,60 @@ export class Px402Client {
     const px402Response = response as Px402Response;
     px402Response.paymentResult = paymentResult;
     return px402Response;
+  }
+
+  /**
+   * Fetch via transport (relay network)
+   */
+  private async fetchViaTransport(
+    url: string,
+    init?: Px402RequestInit
+  ): Promise<Response> {
+    if (!this.transport) {
+      throw new Px402Error('TRANSPORT_NOT_AVAILABLE', 'No transport configured');
+    }
+
+    // Ensure connected
+    if (!this.transport.isConnected()) {
+      await this.transport.connect();
+    }
+
+    // Convert RequestInit to transport format
+    const headers: Record<string, string> = {};
+    if (init?.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach((value, key) => {
+          headers[key] = value;
+        });
+      } else if (Array.isArray(init.headers)) {
+        for (const [key, value] of init.headers) {
+          headers[key] = value;
+        }
+      } else {
+        Object.assign(headers, init.headers);
+      }
+    }
+
+    // Make request via transport
+    const transportResponse = await this.transport.request(url, {
+      method: init?.method,
+      headers,
+      body: init?.body as string | undefined,
+    });
+
+    // Convert transport response to Response
+    return this.transportResponseToResponse(transportResponse);
+  }
+
+  /**
+   * Convert transport response to standard Response
+   */
+  private transportResponseToResponse(tr: TransportResponse): Response {
+    const headers = new Headers(tr.headers);
+    return new Response(tr.body, {
+      status: tr.status,
+      headers,
+    });
   }
 }
 

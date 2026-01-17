@@ -94,6 +94,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supports base64 and JSON message encoding
 - Event-driven architecture for relay events
 
+## [0.3.1] - 2026-01-17
+
+### Added
+
+#### @px402/server
+- `NullifierRegistry` interface for double-spend prevention
+- `MemoryNullifierRegistry` implementation with TTL and max entries support
+- 14 new tests for nullifier tracking
+
+#### @px402/solana
+- Nullifier integration in `PrivateCashScheme` for double-spend prevention
+- Relayer fee support in payment flow
+- `SchemeRelayerConfig` for default relayer configuration
+- Requirements-level relayer override via `extra.relayer`
+- 19 new integration tests (47 total)
+
+#### @px402/client
+- `Transport` interface for custom HTTP routing
+- Relay transport integration in `Px402Client`
+- `RelayOptions` for per-request relay configuration
+
+#### @px402/core
+- `relayer` field in `GenerateProofParams` for anonymous transactions
+
+### Fixed
+- Payment verification now properly validates recipient address
+- Double-spend attacks prevented via nullifier tracking
+- Sequential payments now work correctly with unique nullifiers
+
+### Technical
+- 299 total tests across all packages
+- End-to-end integration tests for complete payment flow
+
 ## [Unreleased]
 
 ### Planned

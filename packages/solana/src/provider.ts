@@ -165,10 +165,11 @@ export class SolanaPrivacyProvider implements PrivacyProvider {
   async generatePaymentProof(params: GenerateProofParams): Promise<PaymentProof> {
     this.ensureInitialized();
 
-    // Execute withdrawal to generate proof
+    // Execute withdrawal to generate proof (with optional relayer)
     const result = await this.withdraw({
       note: params.note,
       recipient: params.recipient,
+      relayer: params.relayer,
     });
 
     return {
