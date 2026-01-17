@@ -14,3 +14,6 @@ export * from './scheme.js';
 
 // Privacy Cash adapter
 export * from './privacy-cash.js';
+
+// Direct contract adapter (for local testing without indexer)
+export * from './direct-adapter.js';

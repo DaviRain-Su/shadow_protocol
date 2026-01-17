@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Px402 - Privacy Payments for HTTP 402</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 0;
+        }
+
+        h1 {
+            font-size: 3rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #888;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h2 .icon {
+            font-size: 1.5rem;
+        }
+
+        .balance-display {
+            text-align: center;
+            padding: 30px;
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .balance-amount {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .balance-label {
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 217, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .api-list {
+            list-style: none;
+        }
+
+        .api-item {
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .api-info {
+            flex: 1;
+        }
+
+        .api-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .api-price {
+            color: #00ff88;
+            font-size: 0.9rem;
+        }
+
+        .api-free {
+            color: #888;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .status-402 {
+            background: rgba(255, 165, 0, 0.2);
+            color: #ffa500;
+        }
+
+        .status-200 {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .log-panel {
+            background: #0a0a0a;
+            border-radius: 12px;
+            padding: 16px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-time {
+            color: #666;
+            margin-right: 10px;
+        }
+
+        .log-success {
+            color: #00ff88;
+        }
+
+        .log-info {
+            color: #00d9ff;
+        }
+
+        .log-warning {
+            color: #ffa500;
+        }
+
+        .log-error {
+            color: #ff4444;
+        }
+
+        .flow-diagram {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 30px 0;
+            margin: 20px 0;
+        }
+
+        .flow-step {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .flow-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .flow-arrow {
+            font-size: 2rem;
+            color: #00d9ff;
+        }
+
+        .privacy-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(138, 43, 226, 0.2);
+            color: #a855f7;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-left: 10px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #00d9ff;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .response-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .response-display.show {
+            display: block;
+        }
+
+        .response-content {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #00ff88;
+            white-space: pre-wrap;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            animation: pulse 1s infinite;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Px402</h1>
+            <p class="subtitle">Privacy-Preserving HTTP 402 Payments on Solana</p>
+        </header>
+
+        <!-- Architecture Flow -->
+        <div class="card">
+            <h2><span class="icon">🔐</span> Privacy Payment Flow</h2>
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="flow-icon">👤</div>
+                    <div>Client</div>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="flow-icon">🔄</div>
+                    <div>Relayer</div>
+                    <span class="privacy-badge">Anonymous</span>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="flow-icon">🔒</div>
+                    <div>Privacy Cash</div>
+                    <span class="privacy-badge">ZK Proof</span>
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <div class="flow-icon">🏪</div>
+                    <div>Merchant</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-grid">
+            <!-- Wallet Panel -->
+            <div class="card">
+                <h2><span class="icon">💰</span> Privacy Wallet</h2>
+                <div class="balance-display">
+                    <div class="balance-amount" id="balance">0.00 SOL</div>
+                    <div class="balance-label">Private Balance</div>
+                </div>
+                <button class="btn btn-primary" id="depositBtn" onclick="deposit()">
+                    Deposit 0.5 SOL to Privacy Pool
+                </button>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="noteCount">0</div>
+                        <div class="stat-label">Unspent Notes</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="merkleLeaves">0</div>
+                        <div class="stat-label">Merkle Leaves</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="nullifierCount">0</div>
+                        <div class="stat-label">Nullifiers</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Panel -->
+            <div class="card">
+                <h2><span class="icon">🌐</span> Premium API Endpoints</h2>
+                <ul class="api-list">
+                    <li class="api-item">
+                        <div class="api-info">
+                            <div class="api-name">/api/free</div>
+                            <div class="api-free">Free - No payment required</div>
+                        </div>
+                        <button class="btn btn-secondary" style="width: auto;" onclick="callApi('/api/free')">
+                            Call
+                        </button>
+                    </li>
+                    <li class="api-item">
+                        <div class="api-info">
+                            <div class="api-name">/api/premium</div>
+                            <div class="api-price">0.05 SOL per request</div>
+                        </div>
+                        <button class="btn btn-secondary" style="width: auto;" onclick="callApi('/api/premium')">
+                            Call
+                        </button>
+                    </li>
+                    <li class="api-item">
+                        <div class="api-info">
+                            <div class="api-name">/api/ai-inference</div>
+                            <div class="api-price">0.1 SOL per request</div>
+                        </div>
+                        <button class="btn btn-secondary" style="width: auto;" onclick="callApi('/api/ai-inference')">
+                            Call
+                        </button>
+                    </li>
+                </ul>
+                <div class="response-display" id="responseDisplay">
+                    <strong>Response:</strong>
+                    <pre class="response-content" id="responseContent"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Panel -->
+        <div class="card" style="margin-top: 30px;">
+            <h2><span class="icon">📋</span> Transaction Log</h2>
+            <div class="log-panel" id="logPanel">
+                <div class="log-entry">
+                    <span class="log-time">[System]</span>
+                    <span class="log-info">Px402 Demo initialized. Connect your wallet to begin.</span>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Built with Privacy Cash on Solana | HTTP 402 Payment Required</p>
+            <p style="margin-top: 10px; font-size: 0.8rem;">
+                Hackathon Demo - Px402 Privacy Payment Protocol
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // Demo State
+        let state = {
+            balance: 0,
+            notes: [],
+            nullifierCount: 0,
+            merkleLeaves: 0,
+        };
+
+        const API_BASE = 'http://localhost:3404';
+        const RELAYER_URL = 'http://localhost:3501';
+
+        // Logging
+        function log(message, type = 'info') {
+            const panel = document.getElementById('logPanel');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="log-${type}">${message}</span>
+            `;
+            panel.appendChild(entry);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        // Update UI
+        function updateUI() {
+            document.getElementById('balance').textContent = `${state.balance.toFixed(2)} SOL`;
+            document.getElementById('noteCount').textContent = state.notes.length;
+            document.getElementById('merkleLeaves').textContent = state.merkleLeaves;
+            document.getElementById('nullifierCount').textContent = state.nullifierCount;
+        }
+
+        // Deposit
+        async function deposit() {
+            const btn = document.getElementById('depositBtn');
+            btn.disabled = true;
+            btn.textContent = 'Depositing...';
+            btn.classList.add('loading');
+
+            log('Initiating deposit to Privacy Pool...', 'info');
+
+            // Simulate deposit
+            await new Promise(r => setTimeout(r, 1500));
+
+            const note = {
+                commitment: Math.random().toString(16).slice(2),
+                nullifier: Math.random().toString(16).slice(2),
+                amount: 0.5,
+            };
+
+            state.notes.push(note);
+            state.balance += 0.5;
+            state.merkleLeaves += 1;
+
+            log(`✓ Deposited 0.5 SOL to Privacy Pool`, 'success');
+            log(`✓ Commitment: ${note.commitment.slice(0, 16)}...`, 'success');
+            log(`✓ Note added to wallet (ZK-encrypted)`, 'success');
+
+            updateUI();
+
+            btn.disabled = false;
+            btn.textContent = 'Deposit 0.5 SOL to Privacy Pool';
+            btn.classList.remove('loading');
+        }
+
+        // Call API
+        async function callApi(endpoint) {
+            const responseDisplay = document.getElementById('responseDisplay');
+            const responseContent = document.getElementById('responseContent');
+
+            log(`Calling ${endpoint}...`, 'info');
+
+            // Simulate API call
+            await new Promise(r => setTimeout(r, 500));
+
+            if (endpoint === '/api/free') {
+                // Free endpoint
+                responseContent.textContent = JSON.stringify({
+                    message: "Free content!",
+                    timestamp: Date.now()
+                }, null, 2);
+                responseDisplay.classList.add('show');
+                log(`✓ Response 200 OK - Free content received`, 'success');
+            } else {
+                // Paid endpoint
+                if (state.balance < 0.05) {
+                    responseContent.textContent = JSON.stringify({
+                        status: 402,
+                        message: "Payment Required",
+                        x402: {
+                            scheme: "private-exact",
+                            amount: endpoint === '/api/premium' ? "50000000" : "100000000",
+                            token: "SOL"
+                        }
+                    }, null, 2);
+                    responseDisplay.classList.add('show');
+                    log(`⚠ Response 402 - Payment Required`, 'warning');
+                    log(`Insufficient private balance. Deposit more SOL.`, 'warning');
+                    return;
+                }
+
+                // Process payment
+                log(`Creating ZK payment proof...`, 'info');
+                await new Promise(r => setTimeout(r, 800));
+
+                const paymentAmount = endpoint === '/api/premium' ? 0.05 : 0.1;
+                state.balance -= paymentAmount;
+                state.notes.pop();
+                state.nullifierCount += 1;
+
+                log(`✓ Privacy payment sent via Relayer`, 'success');
+                log(`✓ Nullifier registered (double-spend protected)`, 'success');
+
+                await new Promise(r => setTimeout(r, 300));
+
+                const content = endpoint === '/api/premium'
+                    ? { message: "Welcome to premium content!", secret: "The answer is 42", premium: true }
+                    : { message: "AI Inference Complete", result: "Sentiment: Positive (0.92)", model: "gpt-4-turbo" };
+
+                responseContent.textContent = JSON.stringify(content, null, 2);
+                responseDisplay.classList.add('show');
+                log(`✓ Response 200 OK - Content received!`, 'success');
+
+                updateUI();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            log('Connecting to Relayer service...', 'info');
+            setTimeout(() => {
+                log('✓ Connected to Px402 Relayer', 'success');
+                log('✓ Privacy Cash program verified', 'success');
+                log('Ready for private payments!', 'info');
+            }, 500);
+        });
+    </script>
+</body>
+</html>

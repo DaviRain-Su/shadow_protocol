@@ -78,20 +78,54 @@ await agent.pay(apiEndpoint, { mode: 'private' });
 | 标准 x402 | `X-Payment: tx_hash` | 完全公开 |
 | Px402 | `X-Payment: zk_proof` | 仅证明有效性 |
 
-## 快速开始
+## 快速开始 - 运行 Demo
 
-> 🚧 开发中 — 以下为目标 API 设计
+```bash
+# 1. 安装依赖
+pnpm install
+
+# 2. 启动 Demo 服务器
+pnpm --filter @px402/demo start
+
+# 3. 打开浏览器
+open http://localhost:3404/index.html
+```
+
+### Demo 功能
+- 可视化隐私支付流程
+- 模拟存款到隐私池
+- 测试 HTTP 402 付费端点
+- 实时交易日志
+
+### 端点说明
+| 端点 | 价格 | 说明 |
+|------|------|------|
+| `/api/free` | 免费 | 公开内容 |
+| `/api/premium` | 0.05 SOL | 高级内容 |
+| `/api/ai-inference` | 0.1 SOL | AI 模型推理 |
+
+## SDK 使用示例
 
 ```typescript
-import { Px402Client, createProvider } from '@px402/sdk';
+import { Px402Client } from '@px402/client';
+import { PrivateCashScheme, SolanaPrivacyProvider } from '@px402/solana';
 
-const provider = createProvider({
-  chain: 'solana',
-  privacyProtocol: 'privacy-cash',
+// 初始化隐私提供者
+const provider = new SolanaPrivacyProvider({
+  rpcUrl: 'https://api.devnet.solana.com',
+  secretKey: yourSecretKey,
+});
+await provider.initialize();
+
+// 创建隐私支付方案
+const scheme = new PrivateCashScheme({
+  provider,
+  rpcUrl: 'https://api.devnet.solana.com',
 });
 
+// 创建客户端
 const client = new Px402Client({
-  provider,
+  schemes: [scheme],
   defaultMode: 'private',
 });
 
@@ -99,7 +133,7 @@ const client = new Px402Client({
 const response = await client.fetch('https://api.agent-b.ai/inference', {
   method: 'POST',
   body: JSON.stringify({ prompt: '...' }),
-  payment: { maxAmount: '0.01 USDC' },
+  payment: { maxAmount: '50000000' }, // 0.05 SOL
 });
 ```
 
@@ -119,6 +153,7 @@ const response = await client.fetch('https://api.agent-b.ai/inference', {
 
 | 文档 | 描述 |
 |------|------|
+| [PACKAGES.md](docs/PACKAGES.md) | **组件详细文档** |
 | [PX402_VISION.md](docs/PX402_VISION.md) | 产品愿景与架构设计 |
 | [MARKET_ANALYSIS.md](docs/MARKET_ANALYSIS.md) | 市场分析报告 |
 | [MULTICHAIN_DESIGN.md](docs/MULTICHAIN_DESIGN.md) | 多链扩展设计 |

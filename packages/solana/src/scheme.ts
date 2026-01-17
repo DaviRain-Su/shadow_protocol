@@ -54,6 +54,11 @@ export interface PrivateCashSchemeConfig {
   nullifierRegistry?: NullifierRegistry;
   /** Default relayer for anonymous transactions */
   defaultRelayer?: SchemeRelayerConfig;
+  /**
+   * Skip on-chain verification (for local testing with simulated transactions)
+   * WARNING: Only use in development/testing environments
+   */
+  skipOnChainVerification?: boolean;
 }
 
 /**
@@ -90,12 +95,18 @@ export class PrivateCashScheme implements X402Scheme {
   private connection: Connection;
   private nullifierRegistry?: NullifierRegistry;
   private defaultRelayer?: SchemeRelayerConfig;
+  private skipOnChainVerification: boolean;
 
   constructor(config: PrivateCashSchemeConfig) {
     this.provider = config.provider;
     this.connection = new Connection(config.rpcUrl, 'confirmed');
     this.nullifierRegistry = config.nullifierRegistry;
     this.defaultRelayer = config.defaultRelayer;
+    this.skipOnChainVerification = config.skipOnChainVerification ?? false;
+
+    if (this.skipOnChainVerification) {
+      console.warn('[PrivateCashScheme] On-chain verification disabled - for testing only!');
+    }
   }
 
   /**
@@ -243,7 +254,39 @@ export class PrivateCashScheme implements X402Scheme {
       }
     }
 
-    // 4. Verify on-chain transaction
+    // 4. Skip on-chain verification if configured (for local testing)
+    if (this.skipOnChainVerification) {
+      // In test mode, register nullifier and accept payment
+      if (this.nullifierRegistry && data.nullifierHash) {
+        const registered = await this.nullifierRegistry.register({
+          nullifier: data.nullifierHash,
+          txSignature: data.signature,
+          registeredAt: Date.now(),
+          amount: data.amount,
+          token: data.token,
+          recipient: requirements.payTo,
+        });
+
+        if (!registered) {
+          return {
+            valid: false,
+            reason: 'Double-spend detected: nullifier registered by concurrent request',
+          };
+        }
+      }
+
+      return {
+        valid: true,
+        details: {
+          signature: data.signature,
+          timestamp: data.timestamp,
+          nullifierHash: data.nullifierHash,
+          testMode: true,
+        },
+      };
+    }
+
+    // 5. Verify on-chain transaction
     try {
       const tx = await this.connection.getTransaction(data.signature, {
         commitment: 'confirmed',
@@ -265,7 +308,7 @@ export class PrivateCashScheme implements X402Scheme {
         };
       }
 
-      // 5. Parse and verify transfer details
+      // 6. Parse and verify transfer details
       const verificationDetails = await this.verifyTransferDetails(
         tx,
         requirements.payTo,
@@ -277,7 +320,7 @@ export class PrivateCashScheme implements X402Scheme {
         return verificationDetails;
       }
 
-      // 6. Register nullifier to prevent double-spend
+      // 7. Register nullifier to prevent double-spend
       if (this.nullifierRegistry && data.nullifierHash) {
         const registered = await this.nullifierRegistry.register({
           nullifier: data.nullifierHash,

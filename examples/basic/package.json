@@ -7,12 +7,18 @@
   "scripts": {
     "server": "tsx server.ts",
     "client": "tsx client.ts",
-    "demo": "tsx demo.ts"
+    "demo": "tsx demo.ts",
+    "e2e": "tsx e2e-test.ts",
+    "e2e:devnet": "tsx e2e-devnet.ts",
+    "e2e:local": "tsx e2e-local.ts",
+    "e2e:direct": "tsx e2e-direct.ts",
+    "e2e:relayer": "tsx e2e-relayer.ts"
   },
   "dependencies": {
     "@px402/client": "workspace:*",
     "@px402/server": "workspace:*",
     "@px402/solana": "workspace:*",
+    "@px402/relayer": "workspace:*",
     "@solana/web3.js": "^1.98.0",
     "express": "^4.21.0"
   },
