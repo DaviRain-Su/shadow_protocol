@@ -33,3 +33,7 @@ pnpm-debug.log*
 
 # Test coverage
 coverage
+
+# Cache
+cache/
+**/cache/
