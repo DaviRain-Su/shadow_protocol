@@ -254,18 +254,14 @@ const result = doSomething() catch |err| {
 - [ ] GitHub 链接已验证可访问
 - [ ] 所有 Rust `#[test]` 有对应 Zig 测试
 
-### 文档同步（详见 `skills/doc-driven-dev/SKILL.md`）
-- [ ] Story 文件已更新
-- [ ] CHANGELOG.md 已更新
+### 文档同步
 - [ ] ROADMAP.md 状态正确
+- [ ] 相关设计文档已更新
 
 ---
 
 ## 相关文档
 
-- `ROADMAP.md` - 项目路线图（Source of Truth）
-- `README.md` - 用户入口文档
-- `stories/` - 工作单元（Stories）
-- `docs/` - 详细设计文档
-- `CHANGELOG.md` - 变更日志
+- `ROADMAP.md` - 项目路线图
+- `docs/PX402_VISION.md` - Px402 产品愿景与架构设计
 - `skills/` - Claude Code Skills
