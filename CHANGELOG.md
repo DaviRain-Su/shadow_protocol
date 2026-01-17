@@ -74,9 +74,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript strict mode compliance
 - ESM-only packages
 
+## [0.3.0] - 2026-01-17
+
+### Added
+
+#### @px402/relay
+- `RelayNode` class for running relay nodes
+- `RelayTransport` for client-side relay routing
+- `PeerManager` for peer discovery and management
+- `Router` for route selection with 4 strategies (lowest-fee, highest-reputation, balanced, random)
+- `IncentiveManager` for fee calculation and payment verification
+- Message protocol with NaCl box encryption (curve25519-xsalsa20-poly1305)
+- Onion routing support for multi-hop anonymity
+- Node reputation and heartbeat system
+- 125 unit tests
+
+### Technical
+- Uses tweetnacl for cryptographic operations
+- Supports base64 and JSON message encoding
+- Event-driven architecture for relay events
+
 ## [Unreleased]
 
 ### Planned
-- Phase 3: Privacy relay network
 - Phase 4: EVM extension (Base/Ethereum)
 - Phase 5: Multi-chain unification

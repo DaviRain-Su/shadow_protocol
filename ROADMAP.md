@@ -32,12 +32,19 @@
 
 ## Phase 3: 隐私中继网络
 
-- Status: ⏳ Planned
+- Status: ✅ Completed
+- Completed: 2026-01-17
+- Packages:
+  - `@px402/relay` - 中继网络核心 (125 tests)
 - Scope:
-  - 中继器节点设计
-  - 去中心化中继网络
-  - 激励机制
-  - 网络治理
+  - [x] `RelayNode` 中继节点核心
+  - [x] `RelayTransport` 客户端传输
+  - [x] `PeerManager` 节点发现
+  - [x] `Router` 路由选择 (4种策略)
+  - [x] `IncentiveManager` 激励机制
+  - [x] NaCl box 加密
+  - [x] 洋葱路由多层加密
+  - [x] 单元测试 (125 new tests, 266 total)
 
 ## Phase 4: EVM 扩展
 

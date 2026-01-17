@@ -109,7 +109,7 @@ const response = await client.fetch('https://api.agent-b.ai/inference', {
 |-------|------|------|
 | **1** | 协议桥接层 (Solana) | ✅ Completed |
 | **2** | Agent SDK | ✅ Completed |
-| **3** | 隐私中继网络 | ⏳ Planned |
+| **3** | 隐私中继网络 | ✅ Completed |
 | **4** | EVM 扩展 (Base/Ethereum) | ⏳ Planned |
 | **5** | 多链统一 | ⏳ Planned |
 
