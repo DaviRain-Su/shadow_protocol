@@ -15,15 +15,20 @@
 
 ## Phase 2: Agent SDK
 
-- Status: ⏳ Planned
+- Status: ✅ Completed
+- Completed: 2026-01-17
+- Packages:
+  - `@px402/client` - Agent 客户端 SDK (31 tests)
+  - `@px402/server` - 服务端 SDK (31 tests)
 - Scope:
-  - `@px402/core` 链无关核心逻辑
-  - `@px402/solana` Solana 提供者
-  - `@px402/client` Agent 客户端 SDK
-  - `@px402/server` 服务端 SDK
-  - 双模式支付（public/private）
-  - 一次性收款地址生成
-  - 示例项目
+  - [x] `Px402Client` 自动 402 支付处理
+  - [x] `PaymentVerifier` 支付验证器
+  - [x] `px402Middleware` Express 中间件
+  - [x] `requirePayment` 路由级别收费
+  - [x] 双模式支付（public/private）
+  - [x] HTTP 402 解析和验证
+  - [x] 示例项目 (examples/basic)
+  - [x] 单元测试 (62 new tests, 141 total)
 
 ## Phase 3: 隐私中继网络
 

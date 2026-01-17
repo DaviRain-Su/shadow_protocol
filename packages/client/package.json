@@ -1,0 +1,39 @@
+{
+  "name": "@px402/client",
+  "version": "0.1.0",
+  "description": "Px402 client SDK for AI agents with automatic 402 payment handling",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@px402/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "vitest": "^2.0.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "@px402/solana": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@px402/solana": {
+      "optional": true
+    }
+  }
+}

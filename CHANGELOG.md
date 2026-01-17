@@ -39,10 +39,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - vitest for testing
 - ESLint + Prettier configuration
 
+## [0.2.0] - 2026-01-17
+
+### Added
+
+#### @px402/client
+- `Px402Client` class for automatic 402 payment handling
+- `Px402Error` custom error class with error codes
+- HTTP 402 parsing utilities (`parsePaymentRequirements`, `is402Response`)
+- Payment header creation (`createPaymentHeader`, `createPaymentHeaderBase64`)
+- Payment requirements validation
+- Support for both JSON and Base64 encoded payment headers
+- Dual payment mode support (public/private)
+- 31 unit tests
+
+#### @px402/server
+- `PaymentVerifier` class for payment verification
+- `px402Middleware` Express middleware for automatic payment verification
+- `requirePayment` middleware for route-level payment requirements
+- `createRequirePayment` factory for pre-configured middleware
+- `send402Response` helper for sending 402 responses
+- `createPaymentRequirements` helper for creating payment requirements
+- Support for multiple payment schemes
+- Callbacks for payment events (onPaymentVerified, onPaymentFailed)
+- 31 unit tests
+
+#### examples/basic
+- `server.ts` - Express server with paid endpoints example
+- `client.ts` - Px402Client usage example
+- `demo.ts` - In-memory demonstration script
+
+### Technical
+- 62 new tests (141 total)
+- TypeScript strict mode compliance
+- ESM-only packages
+
 ## [Unreleased]
 
 ### Planned
-- Phase 2: Agent SDK (Express/Fastify middleware, HTTP client)
 - Phase 3: Privacy relay network
 - Phase 4: EVM extension (Base/Ethereum)
 - Phase 5: Multi-chain unification
