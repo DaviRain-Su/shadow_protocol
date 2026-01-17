@@ -2,12 +2,16 @@
 
 ## Phase 1: 协议桥接层 (Solana MVP)
 
-- Status: ⏳ Planned
+- Status: ✅ Completed
+- Completed: 2026-01-17
+- Packages:
+  - `@px402/core` - 核心类型和接口 (51 tests)
+  - `@px402/solana` - Solana Privacy Cash 集成 (28 tests)
 - Scope:
-  - 定义 `PrivacyProvider` 抽象接口
-  - 实现 `SolanaPrivacyProvider` (Privacy Cash 适配)
-  - 实现 `PrivacyCashScheme` (x402 Scheme)
-  - 基础单元测试
+  - [x] 定义 `PrivacyProvider` 抽象接口
+  - [x] 实现 `SolanaPrivacyProvider` (Privacy Cash 适配)
+  - [x] 实现 `PrivateCashScheme` (x402 Scheme)
+  - [x] 基础单元测试 (79 tests passing)
 
 ## Phase 2: Agent SDK
 
