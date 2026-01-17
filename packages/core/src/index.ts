@@ -18,3 +18,6 @@ export * from './scheme.js';
 
 // Note management
 export * from './note.js';
+
+// Logger
+export * from './logger.js';

@@ -4,6 +4,8 @@
  * Tracks used nullifiers to prevent double-spend attacks
  */
 
+import type { StorageAdapter } from './storage.js';
+
 /**
  * Nullifier usage information
  */
@@ -227,6 +229,150 @@ export class MemoryNullifierRegistry implements NullifierRegistry {
   }
 }
 
+// ============ Persistent Nullifier Registry ============
+
+/**
+ * Persistent nullifier registry configuration
+ */
+export interface PersistentNullifierRegistryConfig extends NullifierRegistryConfig {
+  /** Storage adapter */
+  storage: StorageAdapter;
+  /** Key prefix for nullifier entries */
+  keyPrefix?: string;
+}
+
+/**
+ * Persistent nullifier registry using storage adapter
+ *
+ * Stores nullifier data in a persistent storage backend.
+ * Suitable for production deployments.
+ */
+export class PersistentNullifierRegistry implements NullifierRegistry {
+  private storage: StorageAdapter;
+  private config: Required<NullifierRegistryConfig>;
+  private keyPrefix: string;
+  private cleanupTimer?: ReturnType<typeof setInterval>;
+
+  constructor(config: PersistentNullifierRegistryConfig) {
+    this.storage = config.storage;
+    this.keyPrefix = config.keyPrefix || 'nullifier:';
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+    };
+
+    // Start cleanup timer if TTL is set
+    if (this.config.ttl > 0 && this.config.cleanupInterval > 0) {
+      this.cleanupTimer = setInterval(() => {
+        this.cleanup().catch(console.error);
+      }, this.config.cleanupInterval);
+    }
+  }
+
+  /**
+   * Stop cleanup timer and close storage
+   */
+  async stop(): Promise<void> {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+    await this.storage.close();
+  }
+
+  private getKey(nullifier: string): string {
+    return `${this.keyPrefix}${nullifier}`;
+  }
+
+  async register(info: NullifierInfo): Promise<boolean> {
+    const key = this.getKey(info.nullifier);
+
+    // Check if already exists
+    if (await this.storage.has(key)) {
+      return false;
+    }
+
+    // Check max entries
+    const count = await this.storage.count();
+    if (count >= this.config.maxEntries) {
+      await this.cleanup();
+    }
+
+    // Store entry
+    const data = JSON.stringify({
+      ...info,
+      registeredAt: Date.now(),
+    });
+
+    await this.storage.set(key, data, this.config.ttl || undefined);
+    return true;
+  }
+
+  async isUsed(nullifier: string): Promise<boolean> {
+    const key = this.getKey(nullifier);
+    return this.storage.has(key);
+  }
+
+  async getUsageInfo(nullifier: string): Promise<NullifierInfo | null> {
+    const key = this.getKey(nullifier);
+    const data = await this.storage.get(key);
+
+    if (!data) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data) as NullifierInfo;
+    } catch {
+      return null;
+    }
+  }
+
+  async getCount(): Promise<number> {
+    const keys = await this.storage.keys(`${this.keyPrefix}*`);
+    return keys.length;
+  }
+
+  async clear(): Promise<void> {
+    const keys = await this.storage.keys(`${this.keyPrefix}*`);
+    for (const key of keys) {
+      await this.storage.delete(key);
+    }
+  }
+
+  /**
+   * Cleanup expired entries
+   */
+  private async cleanup(): Promise<number> {
+    if (this.config.ttl === 0) {
+      return 0;
+    }
+
+    let cleaned = 0;
+    const now = Date.now();
+    const keys = await this.storage.keys(`${this.keyPrefix}*`);
+
+    for (const key of keys) {
+      const data = await this.storage.get(key);
+      if (!data) continue;
+
+      try {
+        const info = JSON.parse(data) as NullifierInfo;
+        if (now - info.registeredAt > this.config.ttl) {
+          await this.storage.delete(key);
+          cleaned++;
+        }
+      } catch {
+        // Invalid data, remove it
+        await this.storage.delete(key);
+        cleaned++;
+      }
+    }
+
+    return cleaned;
+  }
+}
+
 /**
  * Create nullifier registry
  */
@@ -234,6 +380,15 @@ export function createNullifierRegistry(
   config?: NullifierRegistryConfig
 ): NullifierRegistry {
   return new MemoryNullifierRegistry(config);
+}
+
+/**
+ * Create persistent nullifier registry
+ */
+export function createPersistentNullifierRegistry(
+  config: PersistentNullifierRegistryConfig
+): PersistentNullifierRegistry {
+  return new PersistentNullifierRegistry(config);
 }
 
 /**

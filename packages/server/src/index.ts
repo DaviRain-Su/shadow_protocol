@@ -48,7 +48,9 @@ export {
 // Nullifier Registry
 export {
   MemoryNullifierRegistry,
+  PersistentNullifierRegistry,
   createNullifierRegistry,
+  createPersistentNullifierRegistry,
   getGlobalNullifierRegistry,
   setGlobalNullifierRegistry,
 } from './nullifier.js';
@@ -57,7 +59,21 @@ export type {
   NullifierInfo,
   NullifierRegistry,
   NullifierRegistryConfig,
+  PersistentNullifierRegistryConfig,
 } from './nullifier.js';
+
+// Storage Adapters
+export {
+  MemoryStorage,
+  FileStorage,
+  createStorage,
+} from './storage.js';
+
+export type {
+  StorageAdapter,
+  StorageType,
+  FileStorageConfig,
+} from './storage.js';
 
 // Types
 export type {
