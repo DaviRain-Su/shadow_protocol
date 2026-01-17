@@ -49,6 +49,15 @@
   - 链自动选择器
   - 跨链隐私转账（远期）
 
+## Phase 6: ERC-8004 集成
+
+- Status: ⏳ Planned
+- Scope:
+  - AgentCard 扩展支持 Px402 配置
+  - Identity Registry 集成
+  - 隐私声誉反馈（ZK 证明）
+  - Validation Registry 集成（TEE/zkML）
+
 ---
 
 ## 设计文档
@@ -58,3 +67,5 @@
 | [PX402_VISION.md](docs/PX402_VISION.md) | 产品愿景与架构 |
 | [MARKET_ANALYSIS.md](docs/MARKET_ANALYSIS.md) | 市场分析报告 |
 | [MULTICHAIN_DESIGN.md](docs/MULTICHAIN_DESIGN.md) | 多链扩展设计 |
+| [TECHNICAL_IMPLEMENTATION.md](docs/TECHNICAL_IMPLEMENTATION.md) | 技术实现详解 |
+| [ERC8004_X402_STANDARDS.md](docs/ERC8004_X402_STANDARDS.md) | ERC-8004 与 x402 标准解析 |
